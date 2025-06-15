@@ -1,7 +1,6 @@
 import moderngl
 import numpy as np
 import glfw # type:ignore
-import time
 import cv2
 
 
@@ -254,17 +253,9 @@ class WaveSimulation:
     
     def run(self):
         while not glfw.window_should_close(self.window):
-            t1 = time.time()
-
             glfw.poll_events()
             self.update()
             glfw.swap_buffers(self.window)
-
-            try:
-                print(1/(time.time()-t1))
-            except ZeroDivisionError:
-                print(1000.0)
-        
         glfw.terminate()
 
 if __name__ == "__main__":
