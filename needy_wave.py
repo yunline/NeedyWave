@@ -6,10 +6,10 @@ import threading
 import queue
 
 class VideoWriter:
-    def __init__(self, width, height) -> None:
+    def __init__(self, width, height, path, fps) -> None:
         self.width, self.height = width, height
         fourcc = cv2.VideoWriter_fourcc(*'XVID') # type:ignore
-        self.out = cv2.VideoWriter("out.avi", fourcc, 144, (width, height))
+        self.out = cv2.VideoWriter(path, fourcc, fps, (width, height))
         self.frame_queue: queue.Queue[bytes|None] = queue.Queue(64)
 
         self.thread = threading.Thread(target = self.run, daemon=True)
@@ -28,10 +28,23 @@ class VideoWriter:
             self.out.release()
 
 class WaveSimulation:
-    def __init__(self, width=1280, height=720):
-        self.render_intensity_view = True
-        self.save_video = False
+    def __init__(
+        self, 
+        terrain_path,
+        width=1280, 
+        height=720,
+        render_intensity_view=True,
+        save_video=False,
+        video_path=None,
+        video_fps=60,
+        wave_source_freq=10.0,
+        wave_source_amp=2.0,
+    ):
+        self.render_intensity_view = render_intensity_view
+        self.save_video = save_video
         self.window_size = (width, height)
+        self.wave_source_freq = wave_source_freq
+        self.wave_source_amp =wave_source_amp
 
         # 初始化窗口
         if not glfw.init():
@@ -73,10 +86,12 @@ class WaveSimulation:
 
         # 如果需要保存视频，初始化视频保存器
         if self.save_video:
-            self.video_writer = VideoWriter(width, height)
+            if video_path is None:
+                raise ValueError("--video_path not specified")
+            self.video_writer = VideoWriter(width, height, video_path, video_fps)
         
         # 初始化纹理和着色器
-        self.init_textures()
+        self.init_textures(terrain_path)
         self.init_shaders()
         self.init_quad()
 
@@ -99,8 +114,8 @@ class WaveSimulation:
         # 设置回调
         glfw.set_key_callback(self.window, self.key_callback)
 
-    def init_textures(self):
-        terrain = cv2.imread('terrain1.png')
+    def init_textures(self, terrain_path):
+        terrain = cv2.imread(terrain_path)
         terrain = terrain[::-1, ::1] # flip y
         blue_channel, green_channel, red_channel = cv2.split(terrain)
 
@@ -244,7 +259,7 @@ class WaveSimulation:
         # 更新波场
         for _ in range(10):
             self.t+=self.DT
-            wave_source_amp = 3*np.sin(self.t*35/(np.pi*2))
+            wave_source_amp = self.wave_source_amp*np.sin(self.t*self.wave_source_freq/(np.pi*2))
         
             self.fbos[1 - self.current_texture].use()
             self.ctx.viewport = (0, 0, self.tex_width, self.tex_height)
@@ -307,5 +322,19 @@ class WaveSimulation:
         glfw.terminate()
 
 if __name__ == "__main__":
-    sim = WaveSimulation()
-    sim.run()
+    import click
+
+    @click.command()
+    @click.argument("terrain_path")
+    @click.option("--width", default=1280)
+    @click.option("--height", default=720)
+    @click.option("--save-video", is_flag=True)
+    @click.option("--video-path")
+    @click.option("--video-fps", default=60)
+    @click.option("--wave-source-freq", default=10.0)
+    @click.option("--wave-source-amp", default=2.0)
+    @click.option("--render-intensity-view/--render-wave-view", default=True)
+    def run(*args, **kwargs):
+        sim = WaveSimulation(*args, **kwargs)
+        sim.run()
+    run()

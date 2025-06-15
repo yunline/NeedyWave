@@ -3,3 +3,4 @@ glfw
 numpy
 opencv-python
 jinja2
+click
