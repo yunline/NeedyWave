@@ -8,7 +8,7 @@ uniform float waveSource1Amplitude;
 uniform float C;
 
 uniform float coeff; // coeff = (DT/DX)**2
-uniform vec2 texelSize;
+uniform vec2 tex_pixel_size;
 
 in vec2 uv;
 out vec4 fragColor;
@@ -16,10 +16,10 @@ out vec4 fragColor;
 void main() {
     // 2D wave equation: u(t+1) = (c*dt/dx)^2 * ∇²u(t) + 2u(t) - u(t-1) - side_damp * (u(t) - u(t-1))
     float center = texture(currentWave, uv).r;
-    float left = texture(currentWave, uv - vec2(texelSize.x, 0.0)).r;
-    float right = texture(currentWave, uv + vec2(texelSize.x, 0.0)).r;
-    float top = texture(currentWave, uv + vec2(0.0, texelSize.y)).r;
-    float bottom = texture(currentWave, uv - vec2(0.0, texelSize.y)).r;
+    float left = texture(currentWave, uv - vec2(tex_pixel_size.x, 0.0)).r;
+    float right = texture(currentWave, uv + vec2(tex_pixel_size.x, 0.0)).r;
+    float top = texture(currentWave, uv + vec2(0.0, tex_pixel_size.y)).r;
+    float bottom = texture(currentWave, uv - vec2(0.0, tex_pixel_size.y)).r;
 
     float c = C*texture(waveSpeed, uv).r;
     float side_damp = texture(sideDamp, uv).r;

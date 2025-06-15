@@ -25,10 +25,16 @@ uniform float u_max;
 uniform float v_min;
 uniform float v_max;
 
+uniform vec2 tex_pixel_size;
+
 in vec2 uv;
 out vec4 fragColor;
 
 vec4 wave_view(vec2 content_uv) {
+    // 防止未使用的tex_pixel_size被编译器优化掉
+    if (tex_pixel_size.x>(1.0/0.0)) {
+        discard;
+    }
     // 采样幅值
     float amp = texture(wave_tex, content_uv).r;
 
@@ -44,13 +50,12 @@ vec4 wave_view(vec2 content_uv) {
 }
 
 vec4 intensity_view(vec2 content_uv) {
-    vec2 texel = vec2(1.0/textureSize(wave_tex, 0).x, 1.0/textureSize(wave_tex, 0).y);
     float sum_intensity = 0.0;
     int count = 0;
     // 采样5x5范围内平均光强
     for(int j=-2;j<=2;++j){
         for(int i=-2;i<=2;++i){
-            vec2 offset = vec2(float(i), float(j)) * texel;
+            vec2 offset = vec2(float(i), float(j)) * tex_pixel_size;
             float amp = texture(wave_tex, content_uv + offset).r;
             sum_intensity += amp * amp;
             count++;

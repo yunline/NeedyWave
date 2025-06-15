@@ -189,6 +189,7 @@ class WaveSimulation:
         )
 
     def update(self):
+        TEX_PIXEL_SIZE = (1.0 / self.tex_width, 1.0 / self.tex_height)
         # 更新波场
         for _ in range(10):
             self.t+=self.DT
@@ -209,7 +210,7 @@ class WaveSimulation:
             self.wave_update_prog['sideDamp'].value = 3
             self.wave_update_prog['waveSource1Mask'].value = 4
             self.wave_update_prog['waveSource1Amplitude'].value = wave_source_amp
-            self.wave_update_prog['texelSize'].value = (1.0 / self.tex_width, 1.0 / self.tex_height)
+            self.wave_update_prog['tex_pixel_size'].value = TEX_PIXEL_SIZE
             self.wave_update_prog['C'].value = self.C
             self.wave_update_prog['coeff'].value = self.COEFF
             
@@ -248,6 +249,7 @@ class WaveSimulation:
         self.visualize_prog['u_max'].value = u_max
         self.visualize_prog['v_min'].value = v_min
         self.visualize_prog['v_max'].value = v_max
+        self.visualize_prog['tex_pixel_size'].value = TEX_PIXEL_SIZE
         self.visualize_quad.render()
     
     def run(self):
