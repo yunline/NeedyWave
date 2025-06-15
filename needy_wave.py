@@ -13,7 +13,7 @@ class WaveSimulation:
         glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 4)
         glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 6)
         glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-        
+
         self.window = glfw.create_window(width, height, "2D Wave Simulation", None, None)
         if not self.window:
             glfw.terminate()
@@ -46,11 +46,20 @@ class WaveSimulation:
 
         # 状态变量
         self.t=0.0
+        self.window_size = (width, height)
+        self.content_uv = (0.0, 1.0, 0.0, 1.0)
         
         # 初始化纹理和着色器
         self.init_textures()
         self.init_shaders()
         self.init_quad()
+        
+        # 设置回调
+        glfw.set_key_callback(self.window, self.key_callback)
+        glfw.set_window_size_callback(self.window, self.window_size_callback)
+
+        # 调用一次window_size_callback以更新content_uv
+        self.window_size_callback(self.window, width, height)
     
     def init_textures(self):
         terrain = cv2.imread('terrain1.png')
@@ -219,18 +228,27 @@ class WaveSimulation:
         
         # 可视化
         self.ctx.screen.use()
-        width, height = glfw.get_window_size(self.window)
-        if width*height==0:
-            width, height = (100, 100)
-
-        self.ctx.viewport = (0, 0, width, height)
+        self.ctx.viewport = (0, 0, self.window_size[0], self.window_size[1])
         #self.ctx.clear()
         
         self.textures[1 - self.current_texture].use(0)
         self.wave_speed_tex.use(1)
         self.visualize_prog['wave_tex'].value = 0
         self.visualize_prog['bg_tex'].value = 1
+        self.visualize_prog['u_min'].value = self.content_uv[0]
+        self.visualize_prog['u_max'].value = self.content_uv[1]
+        self.visualize_prog['v_min'].value = self.content_uv[2]
+        self.visualize_prog['v_max'].value = self.content_uv[3]
+        self.visualize_prog['tex_pixel_size'].value = TEX_PIXEL_SIZE
+        self.visualize_quad.render()
+    
+    def key_callback(self, window, key, scancode, action, mods):
+        pass
 
+    def window_size_callback(self, window, width, height):
+        if width*height==0:
+            width,height = 100,100
+        self.window_size = (width, height)
         screen_aspect = width / height
         if screen_aspect > self.tex_aspect:
             content_width = self.tex_aspect / screen_aspect
@@ -244,12 +262,8 @@ class WaveSimulation:
             v_max = 0.5 + content_height / 2.0
             u_min = 0.0
             u_max = 1.0
-        self.visualize_prog['u_min'].value = u_min
-        self.visualize_prog['u_max'].value = u_max
-        self.visualize_prog['v_min'].value = v_min
-        self.visualize_prog['v_max'].value = v_max
-        self.visualize_prog['tex_pixel_size'].value = TEX_PIXEL_SIZE
-        self.visualize_quad.render()
+        self.content_uv = (u_min, u_max, v_min, v_max)
+
     
     def run(self):
         while not glfw.window_should_close(self.window):
