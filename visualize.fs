@@ -1,4 +1,22 @@
 #version 460
+
+// 下面的注释是jinja2模板，会在编译时被替换，请勿删除
+
+/*
+{% macro define_macros(macros) %}
+    {{ '\u002A\u002F' }} 
+
+    {% for name, value in macros %}
+        #define {{ name }} {{ value }}
+    {% endfor %}
+
+    {{ '\u002F\u002A' }}
+{% endmacro %}
+
+{{ define_macros(EXT_MACROS) }}
+*/
+
+
 uniform sampler2D wave_tex;
 uniform sampler2D bg_tex;
 
@@ -73,8 +91,12 @@ void main() {
     content_uv.x = (uv.x - u_min) / (u_max - u_min);
     content_uv.y = (uv.y - v_min) / (v_max - v_min);
 
-    // 采样波形
-    vec4 wave_color = intensity_view(content_uv);
+    vec4 wave_color;
+#if defined(RENDER_INTENSITY_VIEW)
+    wave_color = intensity_view(content_uv);
+#else
+    wave_color = wave_view(content_uv);
+#endif
     // 采样背景
     vec4 bg_color = texture(bg_tex, content_uv).r * vec4(0.0, 0.1, 0.2, 1.0);
     // 混合输出

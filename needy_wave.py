@@ -42,6 +42,10 @@ class WaveSimulation:
         self.SIDE_DAMP_WIDTH = 50.0 # m
         self.SIDE_DAMP_MAX = 5.0
 
+        # 着色器参数
+        self.render_intensity_view = True
+
+        # 状态变量
         self.t=0.0
         
         # 初始化纹理和着色器
@@ -119,7 +123,10 @@ class WaveSimulation:
             self.ctx.framebuffer(self.textures[1])
         ]
     
-    def init_shaders(self):
+    def init_shaders(self) -> None:
+        from jinja2 import Template
+
+        # 加载着色器代码
         with open("vertex.vs", encoding="utf8") as shader_file:
             vertex_shader_code = shader_file.read()
 
@@ -128,8 +135,17 @@ class WaveSimulation:
         
         with open("visualize.fs", encoding="utf8") as shader_file:
             visualize_shader_code = shader_file.read()
+        
+        # 渲染jinja2模板
+        visualize_code_template:Template = Template(visualize_shader_code)
+        ext_macros:list[tuple[str, str]] = []
+        if self.render_intensity_view:
+            ext_macros.append(("RENDER_INTENSITY_VIEW", ""))
+        visualize_shader_code = visualize_code_template.render(
+            EXT_MACROS=ext_macros
+        )
 
-    
+        # 编译着色器程序
         self.wave_update_prog = self.ctx.program(
             vertex_shader=vertex_shader_code,
             fragment_shader=wave_shader_code
