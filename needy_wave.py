@@ -2,7 +2,30 @@ import moderngl
 import numpy as np
 import glfw # type:ignore
 import cv2
+import threading
+import queue
 
+class VideoWriter:
+    def __init__(self, width, height) -> None:
+        self.width, self.height = width, height
+        fourcc = cv2.VideoWriter_fourcc(*'XVID') # type:ignore
+        self.out = cv2.VideoWriter("out.avi", fourcc, 144, (width, height))
+        self.frame_queue: queue.Queue[bytes|None] = queue.Queue(64)
+
+        self.thread = threading.Thread(target = self.run, daemon=True)
+
+    def run(self):
+        try:
+            while 1:
+                pixels = self.frame_queue.get()
+                if pixels is None:
+                    return
+                frame = np.frombuffer(pixels, dtype=np.uint8) \
+                    .reshape((self.height, self.width, 3))
+                frame_bgr_flipped = cv2.flip(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), 0)
+                self.out.write(frame_bgr_flipped)
+        finally:
+            self.out.release()
 
 class WaveSimulation:
     def __init__(self, width=1280, height=720):
@@ -48,6 +71,12 @@ class WaveSimulation:
         self.t=0.0
         self.window_size = (width, height)
         self.content_uv = (0.0, 1.0, 0.0, 1.0)
+
+        self.save_video = False
+
+        # 如果需要保存视频，初始化视频保存器
+        if self.save_video:
+            self.video_writer = VideoWriter(width, height)
         
         # 初始化纹理和着色器
         self.init_textures()
@@ -130,6 +159,11 @@ class WaveSimulation:
             self.ctx.framebuffer(self.textures[0]),
             self.ctx.framebuffer(self.textures[1])
         ]
+
+        if self.save_video:
+            self.fbo_video = self.ctx.framebuffer(
+                self.ctx.renderbuffer(self.window_size)
+            )
     
     def init_shaders(self) -> None:
         from jinja2 import Template
@@ -241,6 +275,9 @@ class WaveSimulation:
         self.visualize_prog['v_max'].value = self.content_uv[3]
         self.visualize_prog['tex_pixel_size'].value = TEX_PIXEL_SIZE
         self.visualize_quad.render()
+
+        if self.save_video:
+            self.ctx.copy_framebuffer(self.fbo_video, self.ctx.screen)
     
     def key_callback(self, window, key, scancode, action, mods):
         pass
@@ -266,10 +303,18 @@ class WaveSimulation:
 
     
     def run(self):
+        if self.save_video:
+            self.video_writer.thread.start()
         while not glfw.window_should_close(self.window):
             glfw.poll_events()
             self.update()
             glfw.swap_buffers(self.window)
+            if self.save_video:
+                frame = self.fbo_video.read()
+                self.video_writer.frame_queue.put(frame)
+        if self.save_video:
+            self.video_writer.frame_queue.put(None)
+            self.video_writer.thread.join()
         glfw.terminate()
 
 if __name__ == "__main__":
