@@ -29,6 +29,10 @@ class VideoWriter:
 
 class WaveSimulation:
     def __init__(self, width=1280, height=720):
+        self.render_intensity_view = True
+        self.save_video = False
+        self.window_size = (width, height)
+
         # 初始化窗口
         if not glfw.init():
             raise RuntimeError("Could not initialize GLFW")
@@ -36,6 +40,7 @@ class WaveSimulation:
         glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 4)
         glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 6)
         glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+        glfw.window_hint(glfw.RESIZABLE, False)
 
         self.window = glfw.create_window(width, height, "2D Wave Simulation", None, None)
         if not self.window:
@@ -64,15 +69,7 @@ class WaveSimulation:
         self.SIDE_DAMP_WIDTH = 50.0 # m
         self.SIDE_DAMP_MAX = 5.0
 
-        # 着色器参数
-        self.render_intensity_view = True
-
-        # 状态变量
-        self.t=0.0
-        self.window_size = (width, height)
-        self.content_uv = (0.0, 1.0, 0.0, 1.0)
-
-        self.save_video = False
+        self.t=0.0 # 时间积分
 
         # 如果需要保存视频，初始化视频保存器
         if self.save_video:
@@ -82,14 +79,26 @@ class WaveSimulation:
         self.init_textures()
         self.init_shaders()
         self.init_quad()
-        
+
+        # 初始化窗口尺寸
+        screen_aspect = width / height
+        if screen_aspect > self.tex_aspect:
+            content_width = self.tex_aspect / screen_aspect
+            u_min = 0.5 - content_width / 2.0
+            u_max = 0.5 + content_width / 2.0
+            v_min = 0.0
+            v_max = 1.0
+        else:
+            content_height = screen_aspect / self.tex_aspect
+            v_min = 0.5 - content_height / 2.0
+            v_max = 0.5 + content_height / 2.0
+            u_min = 0.0
+            u_max = 1.0
+        self.content_uv = (u_min, u_max, v_min, v_max)
+
         # 设置回调
         glfw.set_key_callback(self.window, self.key_callback)
-        glfw.set_window_size_callback(self.window, self.window_size_callback)
 
-        # 调用一次window_size_callback以更新content_uv
-        self.window_size_callback(self.window, width, height)
-    
     def init_textures(self):
         terrain = cv2.imread('terrain1.png')
         terrain = terrain[::-1, ::1] # flip y
@@ -235,7 +244,7 @@ class WaveSimulation:
         # 更新波场
         for _ in range(10):
             self.t+=self.DT
-            wave_source_amp = 1*np.sin(self.t*10/(np.pi*2))
+            wave_source_amp = 3*np.sin(self.t*35/(np.pi*2))
         
             self.fbos[1 - self.current_texture].use()
             self.ctx.viewport = (0, 0, self.tex_width, self.tex_height)
@@ -281,26 +290,6 @@ class WaveSimulation:
     
     def key_callback(self, window, key, scancode, action, mods):
         pass
-
-    def window_size_callback(self, window, width, height):
-        if width*height==0:
-            width,height = 100,100
-        self.window_size = (width, height)
-        screen_aspect = width / height
-        if screen_aspect > self.tex_aspect:
-            content_width = self.tex_aspect / screen_aspect
-            u_min = 0.5 - content_width / 2.0
-            u_max = 0.5 + content_width / 2.0
-            v_min = 0.0
-            v_max = 1.0
-        else:
-            content_height = screen_aspect / self.tex_aspect
-            v_min = 0.5 - content_height / 2.0
-            v_max = 0.5 + content_height / 2.0
-            u_min = 0.0
-            u_max = 1.0
-        self.content_uv = (u_min, u_max, v_min, v_max)
-
     
     def run(self):
         if self.save_video:
