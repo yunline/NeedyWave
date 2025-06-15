@@ -39,8 +39,8 @@ vec4 wave_view(vec2 content_uv) {
     float amp = texture(wave_tex, content_uv).r;
 
     // 将幅值转为颜色
-    const vec4 POS_COLOR = vec4(1.0, 0.0, 0.0, 1.0);
-    const vec4 NEG_COLOR = vec4(0.0, 1.0, 0.0, 1.0);
+    const vec4 POS_COLOR = vec4(1.0, 0.5, 0.0, 1.0);
+    const vec4 NEG_COLOR = vec4(0.0, 0.6, 1.0, 1.0);
     if (amp>=0.0) {
         return amp * POS_COLOR;
     }
