@@ -1,0 +1,251 @@
+import moderngl
+import numpy as np
+import glfw # type:ignore
+import time
+import cv2
+
+
+class WaveSimulation:
+    def __init__(self, width=1280, height=720):
+        # 初始化窗口
+        if not glfw.init():
+            raise RuntimeError("Could not initialize GLFW")
+        
+        glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 4)
+        glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 6)
+        glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+        
+        self.window = glfw.create_window(width, height, "2D Wave Simulation", None, None)
+        if not self.window:
+            glfw.terminate()
+            raise RuntimeError("Could not create window")
+        
+        glfw.make_context_current(self.window)
+        
+        # 创建 ModernGL 上下文
+        self.ctx = moderngl.create_context()
+        
+        # 乒乓缓冲指针
+        self.current_texture = 0
+        
+        # 模拟参数
+        self.DT = 0.01 # s
+        self.DX = 1.0 # m/px
+        self.C = 10.0 # m/s
+
+        self.COEFF = (self.DT/self.DX)**2
+
+        if self.COEFF*self.C**2>0.25:
+            import warnings
+            warnings.warn(f"CFL={self.COEFF*self.C**2}>0.25, simulation may be unstable")
+        
+        self.SIDE_DAMP_WIDTH = 50.0 # m
+        self.SIDE_DAMP_MAX = 5.0
+
+        self.t=0.0
+        
+        # 初始化纹理和着色器
+        self.init_textures()
+        self.init_shaders()
+        self.init_quad()
+    
+    def init_textures(self):
+        terrain = cv2.imread('terrain1.png')
+        terrain = terrain[::-1, ::1] # flip y
+        blue_channel, green_channel, red_channel = cv2.split(terrain)
+
+        # 获取纹理尺寸
+        self.tex_width = terrain.shape[1]
+        self.tex_height = terrain.shape[0]
+
+        # 计算纹理宽高比
+        self.tex_aspect = self.tex_width / self.tex_height
+
+        # 蓝色: 折射率，0x00为0倍光速，0xff为1倍光速
+        # 绿色: 波源，0x00为0倍振幅，0xff为
+        # 红色: 未使用此通道
+
+        # 初始化振幅
+        initial_data = np.zeros((self.tex_height, self.tex_width), dtype='f4')
+
+        # 初始化折射率
+        wave_speed_data = np.array(blue_channel, dtype='f4')/255.0
+
+        # 初始化波源
+        wave_source1 = np.array(green_channel, dtype='f4')/255.0
+
+        # 初始化边角吸收
+        side_damp = np.zeros((self.tex_height, self.tex_width), "f4")
+        for x in range(self.tex_width):
+            for y in range(self.tex_height):
+                dist = min(x, self.tex_width-1 - x, y, self.tex_height-1 - y)
+                if dist < (self.SIDE_DAMP_WIDTH/self.DX):
+                    side_damp[y, x] = self.SIDE_DAMP_MAX * (1 - dist / (self.SIDE_DAMP_WIDTH/self.DX))**2
+        del x,y
+        side_damp *= self.DT
+        
+        # 创建两个纹理用于乒乓缓冲
+        self.textures = [
+            self.ctx.texture((self.tex_width, self.tex_height), 1, dtype='f4'),
+            self.ctx.texture((self.tex_width, self.tex_height), 1, dtype='f4')
+        ]
+
+        self.wave_speed_tex = self.ctx.texture((self.tex_width, self.tex_height), 1, dtype='f4')
+        self.side_damp_tex = self.ctx.texture((self.tex_width, self.tex_height), 1, dtype='f4')
+        self.wave_source1_mask_tex = self.ctx.texture((self.tex_width, self.tex_height), 1, dtype='f4')
+        
+        # 设置纹理参数
+        for tex in (
+            *self.textures, 
+            self.wave_speed_tex, 
+            self.side_damp_tex, 
+            self.wave_source1_mask_tex
+        ):
+            tex.repeat_x = False
+            tex.repeat_y = False
+            tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            tex.swizzle = 'RRRR'  # 只使用红色通道
+            
+        # 写入初始数据
+        self.textures[0].write(initial_data.tobytes())
+        self.textures[1].write(initial_data.tobytes())
+        self.wave_speed_tex.write(wave_speed_data.tobytes())
+        self.side_damp_tex.write(side_damp.tobytes())
+        self.wave_source1_mask_tex.write(wave_source1.tobytes())
+        
+        # 创建帧缓冲对象
+        self.fbos = [
+            self.ctx.framebuffer(self.textures[0]),
+            self.ctx.framebuffer(self.textures[1])
+        ]
+    
+    def init_shaders(self):
+        with open("vertex.vs", encoding="utf8") as shader_file:
+            vertex_shader_code = shader_file.read()
+
+        with open("wave.fs", encoding="utf8") as shader_file:
+            wave_shader_code = shader_file.read()
+        
+        with open("visualize.fs", encoding="utf8") as shader_file:
+            visualize_shader_code = shader_file.read()
+
+    
+        self.wave_update_prog = self.ctx.program(
+            vertex_shader=vertex_shader_code,
+            fragment_shader=wave_shader_code
+        )
+
+        self.visualize_prog = self.ctx.program(
+            vertex_shader=vertex_shader_code,
+            fragment_shader=visualize_shader_code
+        )
+    
+    def init_quad(self):
+        # 全屏四边形顶点数据
+        vertices = np.array([
+            -1.0, -1.0, 0.0, 0.0,
+             1.0, -1.0, 1.0, 0.0,
+             1.0,  1.0, 1.0, 1.0,
+            -1.0,  1.0, 0.0, 1.0
+        ], dtype='f4')
+        
+        indices = np.array([0, 1, 2, 0, 2, 3], dtype='i4')
+        
+        # 创建VBO和VAO
+        self.vbo = self.ctx.buffer(vertices.tobytes())
+        self.ibo = self.ctx.buffer(indices.tobytes())
+        
+        # 创建渲染对象
+        self.quad = self.ctx.vertex_array(
+            self.wave_update_prog,
+            [
+                (self.vbo, '2f 2f', 'in_position', 'in_texcoord')
+            ],
+            index_buffer=self.ibo
+        )
+        
+        self.visualize_quad = self.ctx.vertex_array(
+            self.visualize_prog,
+            [
+                (self.vbo, '2f 2f', 'in_position', 'in_texcoord')
+            ],
+            index_buffer=self.ibo
+        )
+
+    def update(self):
+        # 更新波场
+        for _ in range(10):
+            self.t+=self.DT
+            wave_source_amp = 1*np.sin(self.t*10/(np.pi*2))
+        
+            self.fbos[1 - self.current_texture].use()
+            self.ctx.viewport = (0, 0, self.tex_width, self.tex_height)
+            
+            self.textures[self.current_texture].use(0)
+            self.textures[1 - self.current_texture].use(1)
+            self.wave_speed_tex.use(2)
+            self.side_damp_tex.use(3)
+            self.wave_source1_mask_tex.use(4)
+            
+            self.wave_update_prog['currentWave'].value = 0
+            self.wave_update_prog['previousWave'].value = 1
+            self.wave_update_prog['waveSpeed'].value = 2
+            self.wave_update_prog['sideDamp'].value = 3
+            self.wave_update_prog['waveSource1Mask'].value = 4
+            self.wave_update_prog['waveSource1Amplitude'].value = wave_source_amp
+            self.wave_update_prog['texelSize'].value = (1.0 / self.tex_width, 1.0 / self.tex_height)
+            self.wave_update_prog['C'].value = self.C
+            self.wave_update_prog['coeff'].value = self.COEFF
+            
+            self.quad.render()
+            # 交换纹理
+            self.current_texture = 1 - self.current_texture
+        
+        # 可视化
+        self.ctx.screen.use()
+        width, height = glfw.get_window_size(self.window)
+        if width*height==0:
+            width, height = (100, 100)
+
+        self.ctx.viewport = (0, 0, width, height)
+        #self.ctx.clear()
+        
+        self.textures[1 - self.current_texture].use(0)
+        self.wave_speed_tex.use(1)
+        self.visualize_prog['waveTexture'].value = 0
+        self.visualize_prog['bgTexture'].value = 1
+        self.visualize_prog['texAspect'].value = self.tex_aspect
+        self.visualize_prog['screenAspect'].value = width / height
+        
+        self.visualize_quad.render()
+        
+        
+    
+    def run(self):
+        while not glfw.window_should_close(self.window):
+            t1 = time.time()
+
+            glfw.poll_events()
+            self.update()
+            glfw.swap_buffers(self.window)
+
+            try:
+                print(1/(time.time()-t1))
+            except ZeroDivisionError:
+                print(1000.0)
+        
+        glfw.terminate()
+    
+    
+
+if __name__ == "__main__":
+    # 测试不同比例的纹理
+    # 宽屏纹理 (16:9)
+    # sim = WaveSimulation(tex_width=640, tex_height=360)
+    
+    # 竖屏纹理 (9:16)
+    # sim = WaveSimulation(tex_width=270, tex_height=480)
+    
+    # 非标准比例
+    sim = WaveSimulation()  # 4:3比例
+    sim.run()
