@@ -1,9 +1,11 @@
 #version 460
-uniform sampler2D waveTexture;
-uniform sampler2D bgTexture;
-uniform float texAspect;  // 纹理宽高比 (width/height)
-uniform float screenAspect; // 屏幕宽高比 (width/height)
+uniform sampler2D wave_tex;
+uniform sampler2D bg_tex;
 
+uniform float u_min;
+uniform float u_max;
+uniform float v_min;
+uniform float v_max;
 
 in vec2 uv;
 out vec4 fragColor;
@@ -40,20 +42,18 @@ vec4 amp_to_color2(float amp) {
 }
 
 void main() {
-    // 计算正确的UV坐标，保持比例
-    vec2 scaledUV = uv;
-    
-    if (screenAspect > texAspect) {
-        // 屏幕比纹理更宽 - 在水平方向缩放
-        scaledUV.x = (uv.x - 0.5) * (texAspect / screenAspect) + 0.5;
-    } else {
-        // 屏幕比纹理更高 - 在垂直方向缩放
-        scaledUV.y = (uv.y - 0.5) * (screenAspect / texAspect) + 0.5;
+    // 判断当前uv是否在内容区域内
+    if (uv.x < u_min || uv.x > u_max || uv.y < v_min || uv.y > v_max) {
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0); // 黑边
+        return;
     }
 
-    float amplitude = texture(waveTexture, scaledUV).r;
+    // 将内容区域的uv映射到[0,1]，保证内容不被拉伸
+    vec2 content_uv;
+    content_uv.x = (uv.x - u_min) / (u_max - u_min);
+    content_uv.y = (uv.y - v_min) / (v_max - v_min);
 
-    float bg = texture(bgTexture, scaledUV).r;
-
+    float amplitude = texture(wave_tex, content_uv).r;
+    float bg = texture(bg_tex, content_uv).r;
     fragColor = max(amp_to_color2(amplitude), bg * vec4(0.0, 0.1, 0.2, 1.0));
 }

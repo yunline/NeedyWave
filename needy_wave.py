@@ -212,14 +212,27 @@ class WaveSimulation:
         
         self.textures[1 - self.current_texture].use(0)
         self.wave_speed_tex.use(1)
-        self.visualize_prog['waveTexture'].value = 0
-        self.visualize_prog['bgTexture'].value = 1
-        self.visualize_prog['texAspect'].value = self.tex_aspect
-        self.visualize_prog['screenAspect'].value = width / height
-        
+        self.visualize_prog['wave_tex'].value = 0
+        self.visualize_prog['bg_tex'].value = 1
+
+        screen_aspect = width / height
+        if screen_aspect > self.tex_aspect:
+            content_width = self.tex_aspect / screen_aspect
+            u_min = 0.5 - content_width / 2.0
+            u_max = 0.5 + content_width / 2.0
+            v_min = 0.0
+            v_max = 1.0
+        else:
+            content_height = screen_aspect / self.tex_aspect
+            v_min = 0.5 - content_height / 2.0
+            v_max = 0.5 + content_height / 2.0
+            u_min = 0.0
+            u_max = 1.0
+        self.visualize_prog['u_min'].value = u_min
+        self.visualize_prog['u_max'].value = u_max
+        self.visualize_prog['v_min'].value = v_min
+        self.visualize_prog['v_max'].value = v_max
         self.visualize_quad.render()
-        
-        
     
     def run(self):
         while not glfw.window_should_close(self.window):
@@ -235,17 +248,7 @@ class WaveSimulation:
                 print(1000.0)
         
         glfw.terminate()
-    
-    
 
 if __name__ == "__main__":
-    # 测试不同比例的纹理
-    # 宽屏纹理 (16:9)
-    # sim = WaveSimulation(tex_width=640, tex_height=360)
-    
-    # 竖屏纹理 (9:16)
-    # sim = WaveSimulation(tex_width=270, tex_height=480)
-    
-    # 非标准比例
-    sim = WaveSimulation()  # 4:3比例
+    sim = WaveSimulation()
     sim.run()
