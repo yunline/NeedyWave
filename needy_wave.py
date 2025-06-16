@@ -122,6 +122,7 @@ class WaveSimulation:
         # 获取纹理尺寸
         self.tex_width = terrain.shape[1]
         self.tex_height = terrain.shape[0]
+        self.tex_pixel_size = (1.0 / self.tex_width, 1.0 / self.tex_height)
 
         # 计算纹理宽高比
         self.tex_aspect = self.tex_width / self.tex_height
@@ -204,11 +205,16 @@ class WaveSimulation:
         
         # 渲染jinja2模板
         visualize_code_template:Template = Template(visualize_shader_code)
-        ext_macros:list[tuple[str, str]] = []
-        if self.render_intensity_view:
-            ext_macros.append(("RENDER_INTENSITY_VIEW", ""))
         visualize_shader_code = visualize_code_template.render(
-            EXT_MACROS=ext_macros
+            RENDER_INTENSITY_VIEW=int(self.render_intensity_view),
+            TEX_PIXEL_SIZE = f"vec2({self.tex_pixel_size[0]},{self.tex_pixel_size[1]})"
+        )
+        
+        wave_code_template:Template = Template(wave_shader_code)
+        wave_shader_code = wave_code_template.render(
+            TEX_PIXEL_SIZE = f"vec2({self.tex_pixel_size[0]},{self.tex_pixel_size[1]})",
+            WAVE_SPEED_FACTOR = self.C,
+            COEFF = self.COEFF
         )
 
         # 编译着色器程序
@@ -255,7 +261,6 @@ class WaveSimulation:
         )
 
     def update(self):
-        TEX_PIXEL_SIZE = (1.0 / self.tex_width, 1.0 / self.tex_height)
         # 更新波场
         for _ in range(10):
             self.t+=self.DT
@@ -276,9 +281,6 @@ class WaveSimulation:
             self.wave_update_prog['sideDamp'].value = 3
             self.wave_update_prog['waveSource1Mask'].value = 4
             self.wave_update_prog['waveSource1Amplitude'].value = wave_source_amp
-            self.wave_update_prog['tex_pixel_size'].value = TEX_PIXEL_SIZE
-            self.wave_update_prog['C'].value = self.C
-            self.wave_update_prog['coeff'].value = self.COEFF
             
             self.quad.render()
             # 交换纹理
@@ -297,7 +299,6 @@ class WaveSimulation:
         self.visualize_prog['u_max'].value = self.content_uv[1]
         self.visualize_prog['v_min'].value = self.content_uv[2]
         self.visualize_prog['v_max'].value = self.content_uv[3]
-        self.visualize_prog['tex_pixel_size'].value = TEX_PIXEL_SIZE
         self.visualize_quad.render()
 
         if self.save_video:

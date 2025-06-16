@@ -3,18 +3,11 @@
 // 下面的注释是jinja2模板，会在编译时被替换，请勿删除
 
 /*
-{% macro define_macros(macros) %}
-    {{ '\u002A\u002F' }} 
-
-    {% for name, value in macros %}
-        #define {{ name }} {{ value }}
-    {% endfor %}
-
-    {{ '\u002F\u002A' }}
-{% endmacro %}
-
-{{ define_macros(EXT_MACROS) }}
+{% macro _(quoted) %}{{ '\u002A\u002F' }}({{ quoted }}){{ '\u002F\u002F' }}{% endmacro %}
 */
+
+#define RENDER_INTENSITY_VIEW /*{{ _(RENDER_INTENSITY_VIEW) }}*/ 1
+#define TEX_PIXEL_SIZE /*{{ _(TEX_PIXEL_SIZE) }}*/ vec2(1.0, 1.0)
 
 
 uniform sampler2D wave_tex;
@@ -25,16 +18,10 @@ uniform float u_max;
 uniform float v_min;
 uniform float v_max;
 
-uniform vec2 tex_pixel_size;
-
 in vec2 uv;
 out vec4 fragColor;
 
 vec4 wave_view(vec2 content_uv) {
-    // 防止未使用的tex_pixel_size被编译器优化掉
-    if (tex_pixel_size.x>(1.0/0.0)) {
-        discard;
-    }
     // 采样幅值
     float amp = texture(wave_tex, content_uv).r;
 
@@ -55,7 +42,7 @@ vec4 intensity_view(vec2 content_uv) {
     // 采样5x5范围内平均光强
     for(int j=-2;j<=2;++j){
         for(int i=-2;i<=2;++i){
-            vec2 offset = vec2(float(i), float(j)) * tex_pixel_size;
+            vec2 offset = vec2(float(i), float(j)) * TEX_PIXEL_SIZE;
             float amp = texture(wave_tex, content_uv + offset).r;
             sum_intensity += amp * amp;
             count++;
@@ -97,7 +84,7 @@ void main() {
     content_uv.y = (uv.y - v_min) / (v_max - v_min);
 
     vec4 wave_color;
-#if defined(RENDER_INTENSITY_VIEW)
+#if RENDER_INTENSITY_VIEW
     wave_color = intensity_view(content_uv);
 #else
     wave_color = wave_view(content_uv);
