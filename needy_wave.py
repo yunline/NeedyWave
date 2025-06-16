@@ -193,13 +193,13 @@ class WaveSimulation:
         from jinja2 import Template
 
         # 加载着色器代码
-        with open("vertex.vs", encoding="utf8") as shader_file:
+        with open("vertex.vert", encoding="utf8") as shader_file:
             vertex_shader_code = shader_file.read()
 
-        with open("wave.fs", encoding="utf8") as shader_file:
+        with open("wave.frag", encoding="utf8") as shader_file:
             wave_shader_code = shader_file.read()
         
-        with open("visualize.fs", encoding="utf8") as shader_file:
+        with open("visualize.frag", encoding="utf8") as shader_file:
             visualize_shader_code = shader_file.read()
         
         # 渲染jinja2模板
